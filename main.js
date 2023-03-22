@@ -1,87 +1,197 @@
-class ProductManager {
-    constructor() {
-      this.products = [];
-    }
-  
-    getProducts() {
-      return this.products;
-    }
-  
-    addProduct(title, description, price, thumbnail, code, stock) {
-      const newProduct = {
-        id: this.generateId(),
-        title,
-        description,
-        price,
-        thumbnail,
-        code,
-        stock
-      };
-      
-      const existingProduct = this.products.find(product => product.code === newProduct.code);
-      if (existingProduct) {
-        throw new Error(`El producto con el código ${newProduct.code} ya existe`);
-      }
-      
-      this.products.push(newProduct);
-    }
-    
-    getProductById(id) {
-      const product = this.products.find(product => product.id === id);
-      if (!product) {
-        throw new Error(`No se encontró el producto con el ID ${id}`);
-      }
-      return product;
-    }
-    
-    updateProduct(id, updateFields) {
-      const productIndex = this.products.findIndex(product => product.id === id);
-      if (productIndex === -1) {
-        throw new Error(`No se encontró el producto con el ID ${id}`);
-      }
-      
-      const product = this.products[productIndex];
-      const updatedProduct = { ...product, ...updateFields };
-      if (updatedProduct.id !== product.id) {
-        throw new Error("No se puede cambiar el ID del producto");
-      }
-      
-      this.products[productIndex] = updatedProduct;
-    }
-    
-    deleteProduct(id) {
-      const productIndex = this.products.findIndex(product => product.id === id);
-      if (productIndex === -1) {
-        throw new Error(`No se encontró el producto con el ID ${id}`);
-      }
-      
-      this.products.splice(productIndex, 1);
-    }
-    
-    generateId() {
-      const timestamp = new Date().getTime().toString(36);
-      const randomNumber = Math.random().toString(36).substr(2, 5);
-      return `${timestamp}-${randomNumber}`;
-    }
-  }
-  
-  const manager = new ProductManager();
-  
-  const products = manager.getProducts();
-  console.log(products); // []
-  
-  manager.addProduct("producto prueba", "Este es un producto prueba", 200, "Sin imagen", "abc123", 25);
-  
-  const productId = manager.getProducts()[0].id;
-  console.log(manager.getProductById(productId)); // { id: "61df7a1c17n-0jf7u", title: "producto prueba", description: "Este es un producto prueba", price: 200, thumbnail: "Sin imagen", code: "abc123", stock: 25 }
-  
-  manager.deleteProduct(productId);
-  console.log(manager.getProducts()); // []
-  
-  try {
-    manager.deleteProduct(productId);
-  } catch (error) {
-    console.error(error.message); // "No se encontro el producto con el ID 61df7a1c17n-0jf7u"
-  }
+const fs = require('fs');
 
+class ProductManager{
+    #autoID;
+    #path;
+
+    constructor(pathFile){
+            this.#path = pathFile;
+            this.#autoID = 1;
+    } 
+
+
+
+    async _loadData(){
+        try {
+            const productsFile = await fs.promises.readFile(this.#path,"utf-8");
+            const products = JSON.parse(productsFile);
+            if(products.length === 0){
+                return [];
+            }
+            return products; 
+        } catch (error) {
+            console.log("El archivo no existe");
+            console.log(`creando ${this.#path} ...`);
+            await fs.promises.writeFile(this.#path,JSON.stringify([]),"utf-8");
+            return [];
+        }
+    }
+    async addProduct(product){
+        try {
+            const {title,description,price,thumbnail,code,stock} = product;
+            if(title === undefined || description === undefined || price === undefined || thumbnail === undefined || code=== undefined || stock=== undefined){
+                throw new Error("Todos los campos deben ser completados");
+            }
+            if(!title || !description || !price || !thumbnail || !code ){
+                throw new Error("Error, Todos los campos deben ser completados");
+            }
+            const productsFile = await this._loadData();
+            if(productsFile.length !== 0){
+                const productExist = productsFile.find(element=> element.code === product.code);
+                if(productExist){
+                    throw new Error("Error, Ya existe un producto con el mismo codigo");
+                }
+                this.#autoID = productsFile[productsFile.length-1].id + 1;
+            }
+            productsFile.push({...product, id:this.#autoID});
+            await fs.promises.writeFile(this.#path,JSON.stringify(productsFile,null,2),"utf-8");
+            return "Producto agregado con éxito!";
+        } catch (error) {
+            return error.message; 
+        }
+
+    }
+    async getProducts(){
+        try {
+            const productsFile = await this._loadData();
+            if(productsFile.length === 0){
+                return [];
+            }
+            return productsFile;    
+        } catch (error) {
+           return error.message;
+           
+        }
+        }
+
+    async getProductById(productId){
+        try {
+            const productsFile = await this._loadData();
+            if(productsFile.length === 0){
+                return "La lista esta vacía";
+            }
+            const product = productsFile.find(element => element.id === productId);
+            if(!product){
+                throw new Error(`El producto con id ${productId} no existe`);
+            }
+            return product;
+        } catch (error) {
+            return `Error: ${error.message}`;
+        }
+
+    }
+
+    async update(productId,product){
+        try {
+            const productsFile = await this._loadData();
+            if(productsFile.length === 0){
+                throw new Error("La lista esta vacía")
+            }
+            const exist = productsFile.find(element => element.id === productId);
+            if(!exist){
+                throw new Error(`El producto con id ${productId} no existe`);
+            }
+            const updatedList = this.#_updateList({...exist,...product},productsFile);
+            await fs.promises.writeFile(this.#path,JSON.stringify(updatedList,null,2),"utf-8");
+            return "Productos actualizados con éxito";
+        } catch (error) {
+            return error.message;
+        }
+    }
+    async delete(productId){         
+            try {
+                const productsFile = await this._loadData();
+                if(productsFile.length === 0){
+                    throw new Error("La lista esta vacía")
+                }
+                const newProducts  = productsFile.filter(element => element.id !== productId);
+                await fs.promises.writeFile(this.#path,JSON.stringify(newProducts,null,2),"utf-8");
+                return "Elemento eliminado!"
+            } catch (error) {
+                return error.message;
+            }
+    }
+
+    #_updateList(product,productlist){
+        const index = productlist.findIndex(element => element.id === product.id);
+        if(index === -1){
+           throw new Error("el producto no se encuentra");
+        } 
+        productlist.splice(index,1,product);
+        return productlist;
+    }
+
+
+}
+
+
+const pathFile = "./Productos.json"
+const oreos = {
+    title:"Oreos",
+    description:"Galletitas rellenas con crema blanca",
+    price:55,
+    thumbnail:"con foto",
+    code:"adfg66",
+    stock:5
+}
+const mana = {
+    title:"Mana",
+    description:"Galletitas simples",
+    price:12,
+    thumbnail:"sin foto",
+    code:"adfg46",
+    stock:20,
+}
+const productList=[
+    {
+        title:"Oreos",
+        description:"Galletitas rellenas",
+        price:23,
+        thumbnail:"sin foto",
+        code:"adfg66",
+        stock:15,
+    },
+    {
+        title:"Mana",
+        description:"Galletitas simples",
+        price:12,
+        thumbnail:"sin foto",
+        code:"adfg46",
+        stock:20,
+    },
+    {
+        title:"Pepitos",
+        description:"Galletitas con chips de chocolate",
+        price:22,
+        thumbnail:"sin foto",
+        code:"adfg13",
+        stock:15,
+    }
+]
+
+const main = async ()=>{
+    try {
+        const galletitas = new ProductManager(pathFile);
+        console.log(await galletitas.getProducts());
+        console.log(await galletitas.addProduct(productList[0]));
+        console.log(await galletitas.addProduct(productList[1]));
+        console.log(await galletitas.addProduct(productList[2]));
+        console.log(await galletitas.getProducts());
+        console.log("El producto con id 1 es: ");
+        console.log(await galletitas.getProductById(1));
+        console.log(await galletitas.getProductById(4));
+        console.log(await galletitas.update(1,oreos));
+        console.log("Borrando producto...\n");
+        console.log(await galletitas.delete(2));
+        console.log(await galletitas.getProducts());
+        console.log("Agregando un nuevo producto....")
+        console.log(await galletitas.addProduct(productList[1]));
+        console.log(await galletitas.getProducts());
+    } catch (error) {
+        console.log(error)
+    }
+
+}
+
+main();
 
